@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+        "net"
 	"os"
 	"strings"
 	"time"
@@ -26,12 +27,15 @@ const (
 	defaultCPUCapacity    = "20"
 	defaultMemoryCapacity = "100Gi"
 	defaultPodCapacity    = "20"
+	defaultNetwork        = "192.168.0.0"
 
 	// Values used in tracing as attribute keys.
 	namespaceKey     = "namespace"
 	nameKey          = "name"
 	containerNameKey = "containerName"
 )
+
+var nextIP net.IP
 
 // See: https://github.com/virtual-kubelet/virtual-kubelet/issues/632
 /*
@@ -56,9 +60,10 @@ type MockProvider struct { // nolint:golint
 
 // MockConfig contains a mock mocklet's configurable parameters.
 type MockConfig struct { //nolint:golint
-	CPU    string `yaml:"cpu,omitempty"`
-	Memory string `yaml:"memory,omitempty"`
-	Pods   string `yaml:"pods,omitempty"`
+	CPU       string `yaml:"cpu,omitempty"`
+	Memory    string `yaml:"memory,omitempty"`
+	Pods      string `yaml:"pods,omitempty"`
+	Network   string `yaml:"network,omitempty"`
 }
 
 // NewMockProviderMockConfig creates a new MockV0Provider. Mock legacy provider does not implement the new asynchronous podnotifier interface
@@ -73,6 +78,10 @@ func NewMockProviderMockConfig(config MockConfig, nodeName, operatingSystem stri
 	if config.Pods == "" {
 		config.Pods = defaultPodCapacity
 	}
+	if config.Network == "" {
+		config.Network = defaultNetwork
+	}
+        nextIP = net.ParseIP(config.Network).To4()
 	provider := MockProvider{
 		nodeName:           nodeName,
 		operatingSystem:    operatingSystem,
@@ -171,10 +180,11 @@ func (p *MockProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		return err
 	}
 	now := metav1.NewTime(time.Now())
+        nextIP[3]++
 	pod.Status = v1.PodStatus{
 		Phase:     v1.PodRunning,
 		HostIP:    "1.2.3.4",
-		PodIP:     "5.6.7.8",
+		PodIP:     nextIP.String(),
 		StartTime: &now,
 		Conditions: []v1.PodCondition{
 			{
